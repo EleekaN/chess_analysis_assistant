@@ -109,7 +109,32 @@ def run_assistant(pgn_text):
     # Wait for assistant response
     while True:
         run_status = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
-        if run_status.status == "completed":
+
+        # check if a function call is required
+        if run_status.status == 'requires_action':
+            print("⚡ Function call detected! Executing...")
+
+            # Extract function call details
+            required_action = run_status.required_action
+            function_call = required_action['submit_tool_outputs']['tool_calls'][0]
+            function_name = function_call["function"]["name"]
+            function_args = json.loads(function_call["function"]["arguments"])
+
+            if function_name == 'analyze_chess_game':
+                output = analyze_chess_game(function_args["pgn_text"])
+
+                # Send the function output back to OpenAI
+                client.beta.threads.runs.submit_tool_outputs(
+                    thread_id=thread_id,
+                    run_id=run.id,
+                    tool_outputs=[{
+                        "tool_call_id": function_call["id"],
+                        "output": json.dumps(output)
+                    }]
+                )
+
+        elif run_status.status == "completed":
+            print("✅ Assistant execution completed.")
             break
         elif run_status.status == "failed":
             print("❌ Assistant execution failed.")
