@@ -1,0 +1,11 @@
+openai
+pydantic
+fastapi
+python-dotenv
+requests
+uvicorn
+python-chess
+chess
+python-multipart
+
+
