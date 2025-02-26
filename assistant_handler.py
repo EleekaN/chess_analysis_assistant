@@ -49,93 +49,160 @@ def analyze_chess_game(pgn_text):
     """
     Sends a chess PGN to the Chess Analysis API for evaluation.
     """
+    """
+    Sends a PGN file to the Chess Analysis API and returns the result.
+    """
+    url = "https://chess-analysis-api.onrender.com/webhook/analyze"
+    headers = {"Content-Type": "application/json"}
+    payload = {"pgn_text": pgn_text}
+
     try:
-        response = requests.post(API_URL, json={"pgn_text": pgn_text})
+        response = requests.post(API_URL, json=payload, headers= headers)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
         return {"error": f"API request failed: {e}"}
     
+# Register the function for OpenAI Assistant
+functions = [
+    {
+        "name": "analyze_chess_game",
+        "description": "Analyze a chess game from PGN format and return insights.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pgn_text": {
+                    "type": "string",
+                    "description": "The PGN text of the chess game.",
+                }
+            },
+            "required": ["pgn_text"],
+        },
+    }
+]
+
+# Create an OpenAI thread    
 def create_thread():
     """ Creates a new thread for the assistant. """
     thread = client.beta.threads.create()
     return thread.id
 
-def send_message(thread_id, message):
-    """ Sends a user message to the Assistant thread. """
+# Run assistant with function calling
+def run_assistant(pgn_text):
+    thread_id = create_thread()
+
+    # Send user message
     client.beta.threads.messages.create(
         thread_id=thread_id,
         role="user",
-        content=message
+        content=f"Analyze this chess game: {pgn_text}",
     )
 
-def run_assistant(thread_id):
-    """ Runs the Assistant on the specified thread. """
+    # Run assistant
     run = client.beta.threads.runs.create(
         thread_id=thread_id,
-        assistant_id=ASSISTANT_ID
+        assistant_id=ASSISTANT_ID,
+        instructions="Analyze the PGN file and provide key insights.",
+        tools=[{"type": "function", "function": functions[0]}],
     )
-    return run.id
 
-def process_assistant_response(thread_id, run_id):
-    """
-    Listens for the Assistant's function call and executes the appropriate function.
-    """
-    # openai.api_key = OPENAI_API_KEY
-
+    # Wait for assistant response
     while True:
-        # Get the latest status of the run
-        run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run_id)
-        
-        if run.status == "completed":
-            print("✅ Assistant has completed execution.")
+        run_status = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
+        if run_status.status == "completed":
             break
-        elif run.status == "failed":
-            print("❌ Assistant run failed:", run)
-            break
-        elif run.status == "requires_action":
-            # Extract function call details
-            tool_calls = run.required_action["submit_tool_outputs"]["tool_calls"]
+        elif run_status.status == "failed":
+            print("❌ Assistant execution failed.")
+            return None
+        time.sleep(2)  # Wait and check again
 
-            tool_outputs = []
-            for tool in tool_calls:
-                function_name = tool["function"]["name"]
-                arguments = json.loads(tool["function"]["arguments"])
+    # Retrieve messages from the thread
+    messages = client.beta.threads.messages.list(thread_id=thread_id)
+    return messages.data
 
-                if function_name == "analyze_chess_game":
-                    pgn_text = arguments["pgn_text"]
-                    result = analyze_chess_game(pgn_text)  # Call your API function
-                    tool_outputs.append({
-                        "tool_call_id": tool["id"],
-                        "output": json.dumps(result)  # Ensure JSON format
-                    })
-            
-            # Sends the results back to OpenAI
-            client.beta.threads.runs.submit_tool_outputs(
-                thread_id=thread_id,
-                run_id=run_id,
-                tool_outputs=tool_outputs
-            )
-
-        time.sleep(2)  # Wait before checking again
-
-def main():
-    """ Orchestrates the full process. """
-    print("🎯 Creating thread...")
-    thread_id = create_thread()
-
-    user_message = "Analyze this chess game: [Paste PGN here]"
-    print(f"📤 Sending message: {user_message}")
-    send_message(thread_id, user_message)
-
-    print("⚡ Running assistant...")
-    run_id = run_assistant(thread_id)
-
-    print("🕵️‍♂️ Checking function calls...")
-    process_assistant_response(thread_id, run_id)
-
+# Example usage
 if __name__ == "__main__":
-    main()
+    pgn_text = "Paste a valid PGN here"
+    print("🎯 Creating thread...")
+    print("📤 Sending message: Analyze this chess game")
+    result = run_assistant(pgn_text)
+    print("📝 Assistant Response:", result)
+
+# def send_message(thread_id, message):
+#     """ Sends a user message to the Assistant thread. """
+#     client.beta.threads.messages.create(
+#         thread_id=thread_id,
+#         role="user",
+#         content=message
+#     )
+
+# def run_assistant(thread_id):
+#     """ Runs the Assistant on the specified thread. """
+#     run = client.beta.threads.runs.create(
+#         thread_id=thread_id,
+#         assistant_id=ASSISTANT_ID
+#     )
+#     return run.id
+
+# def process_assistant_response(thread_id, run_id):
+#     """
+#     Listens for the Assistant's function call and executes the appropriate function.
+#     """
+#     # openai.api_key = OPENAI_API_KEY
+
+#     while True:
+#         # Get the latest status of the run
+#         run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run_id)
+        
+#         if run.status == "completed":
+#             print("✅ Assistant has completed execution.")
+#             break
+#         elif run.status == "failed":
+#             print("❌ Assistant run failed:", run)
+#             break
+#         elif run.status == "requires_action":
+#             # Extract function call details
+#             tool_calls = run.required_action["submit_tool_outputs"]["tool_calls"]
+
+#             tool_outputs = []
+#             for tool in tool_calls:
+#                 function_name = tool["function"]["name"]
+#                 arguments = json.loads(tool["function"]["arguments"])
+
+#                 if function_name == "analyze_chess_game":
+#                     pgn_text = arguments["pgn_text"]
+#                     result = analyze_chess_game(pgn_text)  # Call your API function
+#                     tool_outputs.append({
+#                         "tool_call_id": tool["id"],
+#                         "output": json.dumps(result)  # Ensure JSON format
+#                     })
+            
+#             # Sends the results back to OpenAI
+#             client.beta.threads.runs.submit_tool_outputs(
+#                 thread_id=thread_id,
+#                 run_id=run_id,
+#                 tool_outputs=tool_outputs
+#             )
+
+#         time.sleep(2)  # Wait before checking again
+
+# def main():
+#     """ Orchestrates the full process. """
+#     print("🎯 Creating thread...")
+#     thread_id = create_thread()
+
+#     user_message = "Analyze this chess game: [Paste PGN here]"
+#     print(f"📤 Sending message: {user_message}")
+#     send_message(thread_id, user_message)
+
+#     print("⚡ Running assistant...")
+#     run_id = run_assistant(thread_id)
+
+#     print("🕵️‍♂️ Checking function calls...")
+#     process_assistant_response(thread_id, run_id)
+
+# if __name__ == "__main__":
+#     main()
 
 
 # def handle_pgn_analysis(messages, model="gpt-4-turbo"):
