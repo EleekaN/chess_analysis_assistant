@@ -140,7 +140,12 @@ def run_assistant(pgn_text):
             client.beta.threads.runs.submit_tool_outputs(
                 thread_id=thread_id,
                 run_id=run.id,
-                tool_outputs= tool_outputs
+                tool_outputs= [
+                    {
+                        "tool_call_id": tool_call.id,  # Get the tool call ID
+                        "output": json.dumps(output)  # Send back your API response
+                }
+    ]
             )
 
         elif run_status.status == "completed":
