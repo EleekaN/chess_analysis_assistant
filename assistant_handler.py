@@ -2,17 +2,18 @@ import openai
 import requests
 
 # Webhook URL (update this after deploying on Render)
-WEBHOOK_URL = "http://localhost:8000/webhook/analyze"  # Change to your deployed URL when live
+WEBHOOK_URL = "https://chess-analysis-api.onrender.com/webhook/analyze"  # Change to your deployed URL when live
 
 def analyze_pgn(pgn_text):
     """
     Sends the PGN text to the FastAPI webhook for analysis and retrieves the response.
     Formats the result like Lichess API response.
     """
-    print("🔍 Sending PGN for analysis:\n", pgn_text)
+    print(" 🔍 Sending PGN for analysis:\n", pgn_text)
 
     try:
         response = requests.post(WEBHOOK_URL, json={"pgn_text": pgn_text})
+        response.raise_for_status()
         if response.status_code == 200:
             lichess_response = response.json()
             print(lichess_response) # debugging
