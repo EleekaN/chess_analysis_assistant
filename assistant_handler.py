@@ -116,22 +116,32 @@ def run_assistant(pgn_text):
 
             # Extract function call details
             required_action = run_status.required_action
-            function_call = required_action['submit_tool_outputs']['tool_calls'][0]
-            function_name = function_call["function"]["name"]
-            function_args = json.loads(function_call["function"]["arguments"])
+            tool_calls = required_action.submit_tool_outputs.tool_calls
+            
+            tool_outputs = []
+            for tool_call in tool_calls:
+                function_name = tool_call.function.name
+                function_args = json.loads(tool_call.function.arguments)
 
-            if function_name == 'analyze_chess_game':
-                output = analyze_chess_game(function_args["pgn_text"])
+            # function_call = required_action['submit_tool_outputs']['tool_calls'][0]
+            # function_name = function_call["function"]["name"]
+            # function_args = json.loads(function_call["function"]["arguments"])
 
-                # Send the function output back to OpenAI
-                client.beta.threads.runs.submit_tool_outputs(
-                    thread_id=thread_id,
-                    run_id=run.id,
-                    tool_outputs=[{
-                        "tool_call_id": function_call["id"],
-                        "output": json.dumps(output)
-                    }]
-                )
+                if function_name == 'analyze_chess_game':
+                    output = analyze_chess_game(function_args["pgn_text"])
+
+                    tool_outputs.append({
+                            "tool_call_id": tool_call.id,
+                            "output": json.dumps(output)  # Ensure JSON output format
+                        })
+                
+
+            # Send the function output back to OpenAI
+            client.beta.threads.runs.submit_tool_outputs(
+                thread_id=thread_id,
+                run_id=run.id,
+                tool_outputs= tool_outputs
+            )
 
         elif run_status.status == "completed":
             print("✅ Assistant execution completed.")
@@ -146,8 +156,19 @@ def run_assistant(pgn_text):
     return messages.data
 
 # Example usage
+
 if __name__ == "__main__":
-    pgn_text = "Paste a valid PGN here"
+    pgn_text = """[Event "Example Game"]
+[Site "Lichess"]
+[Date "2024.02.24"]
+[Round "?"]
+[White "Player1"]
+[Black "Player2"]
+[Result "1-0"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7"""
+# if __name__ == "__main__":
+#     pgn_text = "Paste a valid PGN here"
     print("🎯 Creating thread...")
     print("📤 Sending message: Analyze this chess game")
     result = run_assistant(pgn_text)
